@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yıllık Çalışma Saati Hesaplayıcı</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4F46E5;
+            --primary-hover: #4338ca;
+            --bg: #F3F4F6;
+            --card-bg: #FFFFFF;
+            --text: #1F2937;
+            --text-light: #6B7280;
+            --border: #E5E7EB;
+            --success: #10B981;
+            --danger: #EF4444;
+            --neutral: #3B82F6;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 2rem;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            background-color: var(--card-bg);
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 1000px;
+        }
+
+        h1,
+        h2 {
+            color: var(--primary);
+            margin-top: 0;
+        }
+
+        .grid-layout {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 2rem;
+        }
+
+        @media (max-width: 768px) {
+            .grid-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .settings-group {
+            margin-bottom: 1rem;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        input,
+        select {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid var(--border);
+            border-radius: 0.375rem;
+            font-family: inherit;
+            box-sizing: border-box;
+        }
+
+        button {
+            width: 100%;
+            padding: 0.75rem;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            margin-top: 0.5rem;
+        }
+
+        button:hover {
+            background-color: var(--primary-hover);
+        }
+
+        button.secondary {
+            background-color: white;
+            border: 1px solid var(--border);
+            color: var(--text);
+        }
+
+        button.secondary:hover {
+            background-color: var(--bg);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+
+        th,
+        td {
+            padding: 0.5rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            font-weight: 600;
+            color: var(--text-light);
+            background-color: #F9FAFB;
+        }
+
+        .summary-row {
+            cursor: pointer;
+            transition: background-color 0.1s;
+        }
+
+        .summary-row:hover {
+            background-color: #EEF2FF;
+        }
+
+        .summary-row.active {
+            background-color: #E0E7FF;
+            font-weight: 600;
+        }
+
+        .positive {
+            color: var(--success);
+            font-weight: 600;
+        }
+
+        .negative {
+            color: var(--danger);
+            font-weight: 600;
+        }
+
+        .neutral {
+            color: var(--neutral);
+        }
+
+        .day-row.weekend {
+            background-color: #FEF2F2;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 0.5rem;
+        }
+
+        .tab {
+            cursor: pointer;
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            font-weight: 500;
+        }
+
+        .tab.active {
+            background-color: var(--primary);
+            color: white;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <h1>Yıllık Çalışma Takibi</h1>
+
+        <div class="grid-layout">
+            <!-- Left Column: Summary & Navigation -->
+            <div>
+                <div class="card">
+                    <h2>Ayarlar</h2>
+                    <div class="settings-group">
+                        <label>Haftalık Gereken Saat</label>
+                        <input type="number" id="weeklyLimit" value="45" onchange="recalculateAll()">
+                    </div>
+                    <div class="settings-group">
+                        <label>Varsayılan Giriş/Çıkış</label>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <input type="time" id="defStart" value="09:00">
+                            <input type="time" id="defEnd" value="18:00">
+                        </div>
+                    </div>
+                    <div class="settings-group">
+                        <label>Varsayılan Mola (Dk)</label>
+                        <input type="number" id="defBreak" value="60">
+                    </div>
+                    <button onclick="saveData()" class="secondary">💾 Kaydet</button>
+                    <button onclick="resetData()" style="background-color: var(--danger); margin-top: 0.5rem;">🗑️
+                        Sıfırla</button>
+                </div>
+
+                <div class="card">
+                    <h2>Yıllık Özet</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Ay</th>
+                                <th>Fark</th>
+                                <th>Kümülatif</th>
+                            </tr>
+                        </thead>
+                        <tbody id="summaryBody">
+                            <!-- JS will populate -->
+                        </tbody>
+                    </table>
+                    <div style="margin-top: 1rem; font-weight: bold; text-align: right;">
+                        Yıl Sonu Toplam: <span id="yearTotal">0</span> saat
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Month Editor -->
+            <div>
+                <div class="card">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h2 id="monthTitle">Ocak Detayı</h2>
+                        <button onclick="fillMonthDefaults()" class="secondary"
+                            style="width: auto; padding: 0.5rem 1rem;">
+                            ⚡ Otomatik Doldur
+                        </button>
+                    </div>
+
+                    <div style="max-height: 600px; overflow-y: auto;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Gün</th>
+                                    <th>Giriş</th>
+                                    <th>Çıkış</th>
+                                    <th>Mola</th>
+                                    <th>Süre</th>
+                                </tr>
+                            </thead>
+                            <tbody id="daysBody">
+                                <!-- JS will populate -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const months = [
+            "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
+            "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"
+        ];
+
+        // Data Structure: yearData[monthIndex][dayIndex] = { start, end, break }
+        let yearData = {};
+        let currentMonth = 0;
+        const currentYear = new Date().getFullYear();
+
+        function init() {
+            loadData();
+            renderSummary();
+            renderMonth(currentMonth);
+        }
+
+        function getDaysInMonth(month, year) {
+            return new Date(year, month + 1, 0).getDate();
+        }
+
+        function getDayName(day, month, year) {
+            const date = new Date(year, month, day);
+            return date.toLocaleDateString('tr-TR', { weekday: 'long' });
+        }
+
+        function isSunday(day, month, year) {
+            return new Date(year, month, day).getDay() === 0;
+        }
+
+        function loadData() {
+            const saved = localStorage.getItem('calismaSaatiData_v1');
+            if (saved) {
+                yearData = JSON.parse(saved);
+            } else {
+                // Initialize empty structure
+                for (let m = 0; m < 12; m++) {
+                    yearData[m] = {};
+                }
+            }
+
+            const savedLimit = localStorage.getItem('weeklyLimit');
+            if (savedLimit) document.getElementById('weeklyLimit').value = savedLimit;
+        }
+
+        function saveData() {
+            localStorage.setItem('calismaSaatiData_v1', JSON.stringify(yearData));
+            localStorage.setItem('weeklyLimit', document.getElementById('weeklyLimit').value);
+            // alert('Veriler kaydedildi!');
+        }
+
+        function resetData() {
+            if (confirm('Tüm veriler silinecek. Emin misiniz?')) {
+                localStorage.removeItem('calismaSaatiData_v1');
+                location.reload();
+            }
+        }
+
+        function calculateDuration(start, end, breakMin) {
+            if (!start || !end) return 0;
+            const [startH, startM] = start.split(':').map(Number);
+            const [endH, endM] = end.split(':').map(Number);
+            let startMin = startH * 60 + startM;
+            let endMin = endH * 60 + endM;
+            if (endMin < startMin) endMin += 24 * 60; // Overnight
+            let workMin = endMin - startMin - breakMin;
+            return Math.max(0, workMin / 60);
+        }
+
+        function updateDay(dayIndex, field, value) {
+            if (!yearData[currentMonth][dayIndex]) yearData[currentMonth][dayIndex] = {};
+            yearData[currentMonth][dayIndex][field] = value;
+
+            // Recalculate UI for this row
+            const row = document.getElementById(`row-${dayIndex}`);
+            const start = yearData[currentMonth][dayIndex].start || "";
+            const end = yearData[currentMonth][dayIndex].end || "";
+            const brk = yearData[currentMonth][dayIndex].break || 0;
+
+            const duration = calculateDuration(start, end, brk);
+            document.getElementById(`dur-${dayIndex}`).innerText = duration.toFixed(2);
+
+            saveData();
+            renderSummary(); // Update summary in real-time
+        }
+
+        function fillMonthDefaults() {
+            const start = document.getElementById('defStart').value;
+            const end = document.getElementById('defEnd').value;
+            const brk = document.getElementById('defBreak').value;
+            const daysCount = getDaysInMonth(currentMonth, currentYear);
+
+            for (let d = 1; d <= daysCount; d++) {
+                if (isSunday(d, currentMonth, currentYear)) continue; // Skip Sundays
+
+                // Only fill if empty? Or overwrite? Let's overwrite for "Fill" action.
+                yearData[currentMonth][d] = { start, end, break: brk };
+            }
+            renderMonth(currentMonth);
+            renderSummary();
+            saveData();
+        }
+
+        function renderMonth(monthIndex) {
+            currentMonth = monthIndex;
+            document.getElementById('monthTitle').innerText = `${months[monthIndex]} Detayı`;
+
+            // Highlight active month in summary
+            document.querySelectorAll('.summary-row').forEach((el, idx) => {
+                if (idx === monthIndex) el.classList.add('active');
+                else el.classList.remove('active');
+            });
+
+            const tbody = document.getElementById('daysBody');
+            tbody.innerHTML = '';
+            const daysCount = getDaysInMonth(monthIndex, currentYear);
+
+            for (let d = 1; d <= daysCount; d++) {
+                const isSun = isSunday(d, monthIndex, currentYear);
+                const dayName = getDayName(d, monthIndex, currentYear);
+                const data = yearData[monthIndex][d] || {};
+
+                const tr = document.createElement('tr');
+                if (isSun) tr.classList.add('weekend');
+                tr.id = `row-${d}`;
+
+                tr.innerHTML = `
+                    <td><strong>${d}</strong> <span style="font-size:0.8em; color:#666">${dayName}</span></td>
+                    <td><input type="time" value="${data.start || ''}" onchange="updateDay(${d}, 'start', this.value)"></td>
+                    <td><input type="time" value="${data.end || ''}" onchange="updateDay(${d}, 'end', this.value)"></td>
+                    <td><input type="number" value="${data.break || (isSun ? 0 : 60)}" style="width:60px" onchange="updateDay(${d}, 'break', this.value)"></td>
+                    <td id="dur-${d}" style="font-weight:bold">${calculateDuration(data.start, data.end, data.break || 0).toFixed(2)}</td>
+                `;
+                tbody.appendChild(tr);
+            }
+        }
+
+        function renderSummary() {
+            const weeklyLimit = parseFloat(document.getElementById('weeklyLimit').value) || 45;
+            const tbody = document.getElementById('summaryBody');
+            tbody.innerHTML = '';
+
+            let cumulative = 0;
+
+            months.forEach((monthName, idx) => {
+                // Calculate total worked hours in this month
+                let monthWorked = 0;
+                const daysCount = getDaysInMonth(idx, currentYear);
+
+                // Calculate required hours for this month
+                // Logic: Number of weeks * weeklyLimit? 
+                // Or more precise: (Workdays / 6) * weeklyLimit? 
+                // Simplest standard: 4 weeks = 4 * limit?
+                // Better: Count Mondays?
+                // Let's use: (Total Days - Sundays) / 6 * WeeklyLimit is approximation?
+                // Actually, usually it's calculated by weeks.
+                // Let's stick to a simple approximation for now: 4 weeks per month = limit * 4.
+                // OR better: Count full weeks?
+                // Let's assume standard: Month Required = (Days in Month - Sundays) / 6 * Weekly Limit? No that's weird.
+                // Let's use: Total Worked - (Number of Weeks * Limit).
+                // Let's count Sundays. Workdays = Total - Sundays.
+                // If 6 days work week: Required = (Workdays / 6) * WeeklyLimit.
+
+                let sundays = 0;
+                for (let d = 1; d <= daysCount; d++) {
+                    if (isSunday(d, idx, currentYear)) sundays++;
+                    const data = yearData[idx][d] || {};
+                    monthWorked += calculateDuration(data.start, data.end, data.break || 0);
+                }
+
+                const workDays = daysCount - sundays;
+                // Assuming 6-day work week for the limit (e.g. 45h / 6 days = 7.5h daily avg)
+                const dailyAvg = weeklyLimit / 6;
+                const monthRequired = workDays * dailyAvg;
+
+                const diff = monthWorked - monthRequired;
+                cumulative += diff;
+
+                const tr = document.createElement('tr');
+                tr.className = 'summary-row';
+                tr.onclick = () => renderMonth(idx);
+
+                const diffClass = diff > 0 ? 'positive' : (diff < -0.1 ? 'negative' : 'neutral');
+                const cumClass = cumulative > 0 ? 'positive' : (cumulative < -0.1 ? 'negative' : 'neutral');
+
+                tr.innerHTML = `
+                    <td>${monthName}</td>
+                    <td class="${diffClass}">${diff > 0 ? '+' : ''}${diff.toFixed(1)}</td>
+                    <td class="${cumClass}">${cumulative > 0 ? '+' : ''}${cumulative.toFixed(1)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            const totalEl = document.getElementById('yearTotal');
+            totalEl.innerText = (cumulative > 0 ? '+' : '') + cumulative.toFixed(1);
+            totalEl.className = cumulative > 0 ? 'positive' : (cumulative < 0 ? 'negative' : '');
+        }
+
+        function recalculateAll() {
+            renderSummary();
+            saveData();
+        }
+
+        init();
+    </script>
+</body>
+
+</html>
