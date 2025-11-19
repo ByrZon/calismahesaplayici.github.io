@@ -182,6 +182,33 @@
             background-color: var(--primary);
             color: white;
         }
+
+        /* New styles for locked/disabled months */
+        .locked {
+            opacity: 0.5;
+            color: #9CA3AF;
+        }
+
+        .locked input,
+        .locked select,
+        .locked button {
+            pointer-events: none;
+            opacity: 0.6;
+        }
+
+        .summary-row.locked {
+            cursor: default;
+            background-color: #F8FAFC;
+        }
+
+        .month-locked-banner {
+            background: #fff7ed;
+            border: 1px solid #ffedd5;
+            color: #92400e;
+            padding: 0.5rem;
+            border-radius: 0.375rem;
+            margin-bottom: 1rem;
+        }
     </style>
 </head>
 
@@ -198,6 +225,12 @@
                     <div class="settings-group">
                         <label>Haftalık Gereken Saat</label>
                         <input type="number" id="weeklyLimit" value="45" onchange="recalculateAll()">
+                    </div>
+                    <div class="settings-group">
+                        <label>Başlangıç Ayı (İşe Başladığınız Ay)</label>
+                        <select id="startMonth" onchange="onStartMonthChange()">
+                            <!-- Options populated by JS -->
+                        </select>
                     </div>
                     <div class="settings-group">
                         <label>Varsayılan Giriş/Çıkış</label>
@@ -241,11 +274,13 @@
                     <div
                         style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                         <h2 id="monthTitle">Ocak Detayı</h2>
-                        <button onclick="fillMonthDefaults()" class="secondary"
+                        <button onclick="fillMonthDefaults()" id="fillBtn" class="secondary"
                             style="width: auto; padding: 0.5rem 1rem;">
                             ⚡ Otomatik Doldur
                         </button>
                     </div>
+
+                    <div id="lockedBannerContainer"></div>
 
                     <div style="max-height: 600px; overflow-y: auto;">
                         <table>
@@ -279,10 +314,39 @@
         let currentMonth = 0;
         const currentYear = new Date().getFullYear();
 
+        // startMonth: earliest editable month index (0 = Ocak). Default 0.
+        let startMonth = 0;
+
         function init() {
             loadData();
+            populateStartMonthSelect();
             renderSummary();
             renderMonth(currentMonth);
+        }
+
+        function populateStartMonthSelect() {
+            const sel = document.getElementById('startMonth');
+            sel.innerHTML = '';
+            months.forEach((m, idx) => {
+                const opt = document.createElement('option');
+                opt.value = idx;
+                opt.innerText = m;
+                sel.appendChild(opt);
+            });
+            sel.value = startMonth;
+        }
+
+        function onStartMonthChange() {
+            const sel = document.getElementById('startMonth');
+            startMonth = parseInt(sel.value, 10);
+            saveData();
+            // If current viewed month is before startMonth, switch view to startMonth
+            if (currentMonth < startMonth) {
+                renderMonth(startMonth);
+            } else {
+                renderMonth(currentMonth);
+            }
+            renderSummary();
         }
 
         function getDaysInMonth(month, year) {
@@ -311,17 +375,26 @@
 
             const savedLimit = localStorage.getItem('weeklyLimit');
             if (savedLimit) document.getElementById('weeklyLimit').value = savedLimit;
+
+            const savedStart = localStorage.getItem('startMonth');
+            if (savedStart !== null) startMonth = parseInt(savedStart, 10);
+
+            // Ensure yearData has keys for all months
+            for (let m = 0; m < 12; m++) {
+                if (!yearData[m]) yearData[m] = {};
+            }
         }
 
         function saveData() {
             localStorage.setItem('calismaSaatiData_v1', JSON.stringify(yearData));
             localStorage.setItem('weeklyLimit', document.getElementById('weeklyLimit').value);
-            // alert('Veriler kaydedildi!');
+            localStorage.setItem('startMonth', String(startMonth));
         }
 
         function resetData() {
             if (confirm('Tüm veriler silinecek. Emin misiniz?')) {
                 localStorage.removeItem('calismaSaatiData_v1');
+                localStorage.removeItem('startMonth');
                 location.reload();
             }
         }
@@ -338,6 +411,9 @@
         }
 
         function updateDay(dayIndex, field, value) {
+            // prevent editing if month is locked
+            if (currentMonth < startMonth) return;
+
             if (!yearData[currentMonth][dayIndex]) yearData[currentMonth][dayIndex] = {};
             yearData[currentMonth][dayIndex][field] = value;
 
@@ -355,6 +431,12 @@
         }
 
         function fillMonthDefaults() {
+            // Only allow fill if this month is editable (not before startMonth)
+            if (currentMonth < startMonth) {
+                alert(`${months[currentMonth]} ayı düzenleme kilitli. Başlangıç ayı: ${months[startMonth]}.`);
+                return;
+            }
+
             const start = document.getElementById('defStart').value;
             const end = document.getElementById('defEnd').value;
             const brk = document.getElementById('defBreak').value;
@@ -363,7 +445,7 @@
             for (let d = 1; d <= daysCount; d++) {
                 if (isSunday(d, currentMonth, currentYear)) continue; // Skip Sundays
 
-                // Only fill if empty? Or overwrite? Let's overwrite for "Fill" action.
+                // Overwrite for "Fill" action for the selected month only.
                 yearData[currentMonth][d] = { start, end, break: brk };
             }
             renderMonth(currentMonth);
@@ -385,6 +467,22 @@
             tbody.innerHTML = '';
             const daysCount = getDaysInMonth(monthIndex, currentYear);
 
+            // Clear banner container
+            const bannerContainer = document.getElementById('lockedBannerContainer');
+            bannerContainer.innerHTML = '';
+
+            const monthLocked = monthIndex < startMonth;
+            if (monthLocked) {
+                // Show banner telling the user why it's locked
+                const banner = document.createElement('div');
+                banner.className = 'month-locked-banner';
+                banner.innerText = `${months[monthIndex]} ayı düzenleme kilitli. Başlangıç ayı: ${months[startMonth]}.`;
+                bannerContainer.appendChild(banner);
+                document.getElementById('fillBtn').disabled = true;
+            } else {
+                document.getElementById('fillBtn').disabled = false;
+            }
+
             for (let d = 1; d <= daysCount; d++) {
                 const isSun = isSunday(d, monthIndex, currentYear);
                 const dayName = getDayName(d, monthIndex, currentYear);
@@ -394,11 +492,19 @@
                 if (isSun) tr.classList.add('weekend');
                 tr.id = `row-${d}`;
 
+                // If month locked, add 'locked' class so inputs are disabled via CSS and JS check
+                if (monthLocked) tr.classList.add('locked');
+
+                // Build cells with disabled attribute if locked
+                const startVal = data.start || '';
+                const endVal = data.end || '';
+                const breakVal = data.break || (isSun ? 0 : 60);
+
                 tr.innerHTML = `
                     <td><strong>${d}</strong> <span style="font-size:0.8em; color:#666">${dayName}</span></td>
-                    <td><input type="time" value="${data.start || ''}" onchange="updateDay(${d}, 'start', this.value)"></td>
-                    <td><input type="time" value="${data.end || ''}" onchange="updateDay(${d}, 'end', this.value)"></td>
-                    <td><input type="number" value="${data.break || (isSun ? 0 : 60)}" style="width:60px" onchange="updateDay(${d}, 'break', this.value)"></td>
+                    <td><input type="time" value="${startVal}" ${monthLocked ? 'disabled' : ''} onchange="updateDay(${d}, 'start', this.value)"></td>
+                    <td><input type="time" value="${endVal}" ${monthLocked ? 'disabled' : ''} onchange="updateDay(${d}, 'end', this.value)"></td>
+                    <td><input type="number" value="${breakVal}" style="width:60px" ${monthLocked ? 'disabled' : ''} onchange="updateDay(${d}, 'break', this.value)"></td>
                     <td id="dur-${d}" style="font-weight:bold">${calculateDuration(data.start, data.end, data.break || 0).toFixed(2)}</td>
                 `;
                 tbody.appendChild(tr);
@@ -417,20 +523,6 @@
                 let monthWorked = 0;
                 const daysCount = getDaysInMonth(idx, currentYear);
 
-                // Calculate required hours for this month
-                // Logic: Number of weeks * weeklyLimit? 
-                // Or more precise: (Workdays / 6) * weeklyLimit? 
-                // Simplest standard: 4 weeks = 4 * limit?
-                // Better: Count Mondays?
-                // Let's use: (Total Days - Sundays) / 6 * WeeklyLimit is approximation?
-                // Actually, usually it's calculated by weeks.
-                // Let's stick to a simple approximation for now: 4 weeks per month = limit * 4.
-                // OR better: Count full weeks?
-                // Let's assume standard: Month Required = (Days in Month - Sundays) / 6 * Weekly Limit? No that's weird.
-                // Let's use: Total Worked - (Number of Weeks * Limit).
-                // Let's count Sundays. Workdays = Total - Sundays.
-                // If 6 days work week: Required = (Workdays / 6) * WeeklyLimit.
-
                 let sundays = 0;
                 for (let d = 1; d <= daysCount; d++) {
                     if (isSunday(d, idx, currentYear)) sundays++;
@@ -439,7 +531,6 @@
                 }
 
                 const workDays = daysCount - sundays;
-                // Assuming 6-day work week for the limit (e.g. 45h / 6 days = 7.5h daily avg)
                 const dailyAvg = weeklyLimit / 6;
                 const monthRequired = workDays * dailyAvg;
 
@@ -448,13 +539,19 @@
 
                 const tr = document.createElement('tr');
                 tr.className = 'summary-row';
-                tr.onclick = () => renderMonth(idx);
+                const locked = idx < startMonth;
+                if (locked) tr.classList.add('locked');
+
+                // clicking locked months just opens month but editing is disabled; no fill allowed
+                tr.onclick = () => {
+                    renderMonth(idx);
+                };
 
                 const diffClass = diff > 0 ? 'positive' : (diff < -0.1 ? 'negative' : 'neutral');
                 const cumClass = cumulative > 0 ? 'positive' : (cumulative < -0.1 ? 'negative' : 'neutral');
 
                 tr.innerHTML = `
-                    <td>${monthName}</td>
+                    <td>${locked ? '🔒 ' : ''}${monthName}</td>
                     <td class="${diffClass}">${diff > 0 ? '+' : ''}${diff.toFixed(1)}</td>
                     <td class="${cumClass}">${cumulative > 0 ? '+' : ''}${cumulative.toFixed(1)}</td>
                 `;
