@@ -233,6 +233,12 @@
                         </select>
                     </div>
                     <div class="settings-group">
+                        <label>Başlangıç Günü (Ayın Hangi Günü İşe Başladınız)</label>
+                        <select id="startDay" onchange="onStartDayChange()">
+                            <!-- Options populated by JS -->
+                        </select>
+                    </div>
+                    <div class="settings-group">
                         <label>Varsayılan Giriş/Çıkış</label>
                         <div style="display: flex; gap: 0.5rem;">
                             <input type="time" id="defStart" value="09:00">
@@ -316,10 +322,13 @@
 
         // startMonth: earliest editable month index (0 = Ocak). Default 0.
         let startMonth = 0;
+        // startDay: day in the startMonth (1..31). Default 1.
+        let startDay = 1;
 
         function init() {
             loadData();
             populateStartMonthSelect();
+            populateStartDaySelect();
             renderSummary();
             renderMonth(currentMonth);
         }
@@ -336,9 +345,27 @@
             sel.value = startMonth;
         }
 
+        function populateStartDaySelect() {
+            const sel = document.getElementById('startDay');
+            sel.innerHTML = '';
+            // days in currently selected startMonth
+            const daysInMonth = getDaysInMonth(startMonth, currentYear);
+            for (let d = 1; d <= daysInMonth; d++) {
+                const opt = document.createElement('option');
+                opt.value = d;
+                opt.innerText = d;
+                sel.appendChild(opt);
+            }
+            // if saved startDay > daysInMonth clamp it
+            if (startDay > daysInMonth) startDay = daysInMonth;
+            sel.value = startDay;
+        }
+
         function onStartMonthChange() {
             const sel = document.getElementById('startMonth');
             startMonth = parseInt(sel.value, 10);
+            // update day select to match the selected month's day count
+            populateStartDaySelect();
             saveData();
             // If current viewed month is before startMonth, switch view to startMonth
             if (currentMonth < startMonth) {
@@ -346,6 +373,15 @@
             } else {
                 renderMonth(currentMonth);
             }
+            renderSummary();
+        }
+
+        function onStartDayChange() {
+            const sel = document.getElementById('startDay');
+            startDay = parseInt(sel.value, 10);
+            saveData();
+            // if viewing startMonth and current day view is before startDay, keep editing disabled for those days
+            renderMonth(currentMonth);
             renderSummary();
         }
 
@@ -379,6 +415,9 @@
             const savedStart = localStorage.getItem('startMonth');
             if (savedStart !== null) startMonth = parseInt(savedStart, 10);
 
+            const savedStartDay = localStorage.getItem('startDay');
+            if (savedStartDay !== null) startDay = parseInt(savedStartDay, 10);
+
             // Ensure yearData has keys for all months
             for (let m = 0; m < 12; m++) {
                 if (!yearData[m]) yearData[m] = {};
@@ -389,12 +428,14 @@
             localStorage.setItem('calismaSaatiData_v1', JSON.stringify(yearData));
             localStorage.setItem('weeklyLimit', document.getElementById('weeklyLimit').value);
             localStorage.setItem('startMonth', String(startMonth));
+            localStorage.setItem('startDay', String(startDay));
         }
 
         function resetData() {
             if (confirm('Tüm veriler silinecek. Emin misiniz?')) {
                 localStorage.removeItem('calismaSaatiData_v1');
                 localStorage.removeItem('startMonth');
+                localStorage.removeItem('startDay');
                 location.reload();
             }
         }
@@ -406,25 +447,26 @@
             let startMin = startH * 60 + startM;
             let endMin = endH * 60 + endM;
             if (endMin < startMin) endMin += 24 * 60; // Overnight
-            let workMin = endMin - startMin - breakMin;
+            const br = Number(breakMin) || 0;
+            let workMin = endMin - startMin - br;
             return Math.max(0, workMin / 60);
         }
 
-        function updateDay(dayIndex, field, value) {
-            // prevent editing if month is locked
-            if (currentMonth < startMonth) return;
+        function updateDay(monthIndex, dayIndex, field, value) {
+            // prevent editing if month is locked or day is before the start day in the start month
+            if (monthIndex < startMonth) return;
+            if (monthIndex === startMonth && dayIndex < startDay) return;
 
-            if (!yearData[currentMonth][dayIndex]) yearData[currentMonth][dayIndex] = {};
-            yearData[currentMonth][dayIndex][field] = value;
+            if (!yearData[monthIndex][dayIndex]) yearData[monthIndex][dayIndex] = {};
+            yearData[monthIndex][dayIndex][field] = value;
 
-            // Recalculate UI for this row
-            const row = document.getElementById(`row-${dayIndex}`);
-            const start = yearData[currentMonth][dayIndex].start || "";
-            const end = yearData[currentMonth][dayIndex].end || "";
-            const brk = yearData[currentMonth][dayIndex].break || 0;
+            const start = yearData[monthIndex][dayIndex].start || "";
+            const end = yearData[monthIndex][dayIndex].end || "";
+            const brk = Number(yearData[monthIndex][dayIndex].break) || 0;
 
             const duration = calculateDuration(start, end, brk);
-            document.getElementById(`dur-${dayIndex}`).innerText = duration.toFixed(2);
+            const durEl = document.getElementById(`dur-${monthIndex}-${dayIndex}`);
+            if (durEl) durEl.innerText = duration.toFixed(2);
 
             saveData();
             renderSummary(); // Update summary in real-time
@@ -433,7 +475,7 @@
         function fillMonthDefaults() {
             // Only allow fill if this month is editable (not before startMonth)
             if (currentMonth < startMonth) {
-                alert(`${months[currentMonth]} ayı düzenleme kilitli. Başlangıç ayı: ${months[startMonth]}.`);
+                alert(`${months[currentMonth]} ayı düzenleme kilitli. Başlangıç tarihi: ${months[startMonth]} ${startDay}.`);
                 return;
             }
 
@@ -444,9 +486,11 @@
 
             for (let d = 1; d <= daysCount; d++) {
                 if (isSunday(d, currentMonth, currentYear)) continue; // Skip Sundays
+                // If currentMonth is startMonth, do not fill days before startDay
+                if (currentMonth === startMonth && d < startDay) continue;
 
                 // Overwrite for "Fill" action for the selected month only.
-                yearData[currentMonth][d] = { start, end, break: brk };
+                yearData[currentMonth][d] = { start, end, break: String(brk) };
             }
             renderMonth(currentMonth);
             renderSummary();
@@ -476,7 +520,7 @@
                 // Show banner telling the user why it's locked
                 const banner = document.createElement('div');
                 banner.className = 'month-locked-banner';
-                banner.innerText = `${months[monthIndex]} ayı düzenleme kilitli. Başlangıç ayı: ${months[startMonth]}.`;
+                banner.innerText = `${months[monthIndex]} ayı düzenleme kilitli. Başlangıç tarihi: ${months[startMonth]} ${startDay}.`;
                 bannerContainer.appendChild(banner);
                 document.getElementById('fillBtn').disabled = true;
             } else {
@@ -490,10 +534,11 @@
 
                 const tr = document.createElement('tr');
                 if (isSun) tr.classList.add('weekend');
-                tr.id = `row-${d}`;
+                tr.id = `row-${monthIndex}-${d}`;
 
-                // If month locked, add 'locked' class so inputs are disabled via CSS and JS check
-                if (monthLocked) tr.classList.add('locked');
+                // If month locked or this specific day is before startDay in startMonth, add 'locked' class
+                const dayLocked = (monthIndex < startMonth) || (monthIndex === startMonth && d < startDay);
+                if (dayLocked) tr.classList.add('locked');
 
                 // Build cells with disabled attribute if locked
                 const startVal = data.start || '';
@@ -502,10 +547,10 @@
 
                 tr.innerHTML = `
                     <td><strong>${d}</strong> <span style="font-size:0.8em; color:#666">${dayName}</span></td>
-                    <td><input type="time" value="${startVal}" ${monthLocked ? 'disabled' : ''} onchange="updateDay(${d}, 'start', this.value)"></td>
-                    <td><input type="time" value="${endVal}" ${monthLocked ? 'disabled' : ''} onchange="updateDay(${d}, 'end', this.value)"></td>
-                    <td><input type="number" value="${breakVal}" style="width:60px" ${monthLocked ? 'disabled' : ''} onchange="updateDay(${d}, 'break', this.value)"></td>
-                    <td id="dur-${d}" style="font-weight:bold">${calculateDuration(data.start, data.end, data.break || 0).toFixed(2)}</td>
+                    <td><input type="time" value="${startVal}" ${dayLocked ? 'disabled' : ''} onchange="updateDay(${monthIndex}, ${d}, 'start', this.value)"></td>
+                    <td><input type="time" value="${endVal}" ${dayLocked ? 'disabled' : ''} onchange="updateDay(${monthIndex}, ${d}, 'end', this.value)"></td>
+                    <td><input type="number" value="${breakVal}" style="width:60px" ${dayLocked ? 'disabled' : ''} onchange="updateDay(${monthIndex}, ${d}, 'break', this.value)"></td>
+                    <td id="dur-${monthIndex}-${d}" style="font-weight:bold">${calculateDuration(data.start, data.end, data.break || 0).toFixed(2)}</td>
                 `;
                 tbody.appendChild(tr);
             }
